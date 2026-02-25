@@ -6,6 +6,7 @@ One-command VLESS+WS proxy server with TLS.
 
 - Debian/Ubuntu server
 - Domain pointing to your server IP
+- `curl`, `openssl` available
 - Root access
 
 ## Install
