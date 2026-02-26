@@ -1,31 +1,78 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DOMAIN="${NOVA_DOMAIN:?domain required: export NOVA_DOMAIN=sub.domain.tld}"
+detect_primary_ip() {
+    local ip_addr
+    ip_addr="$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1; i<=NF; i++) if ($i=="src") {print $(i+1); exit}}')"
+    if [ -z "${ip_addr:-}" ]; then
+        ip_addr="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    fi
+    if [ -z "${ip_addr:-}" ]; then
+        echo "Unable to detect primary IPv4. Set NOVA_HOST explicitly." >&2
+        exit 1
+    fi
+    echo "$ip_addr"
+}
+
+is_ip() {
+    python3 - "$1" <<'PY'
+import ipaddress
+import sys
+try:
+    ipaddress.ip_address(sys.argv[1])
+    sys.exit(0)
+except ValueError:
+    sys.exit(1)
+PY
+}
+
+HOST="${NOVA_HOST:-$(detect_primary_ip)}"
 UUID="${NOVA_UUID:-$(cat /proc/sys/kernel/random/uuid)}"
 WS_PATH="${NOVA_WS_PATH:-"/api/v1/$(openssl rand -hex 4)"}"
-CERTBOT_STAGING="${NOVA_STAGING:+--staging}"
+ACME_STAGING="${NOVA_STAGING:+--staging}"
+ACME_FORCE="${NOVA_FORCE:+--force}"
 
-INSTANCE=$(echo "$DOMAIN" | tr '.' '-')
+INSTANCE=$(echo "$HOST" | tr '.:' '--')
 XRAY_PORT=$(shuf -i 10000-60000 -n 1)
-CERT_DIR="/etc/letsencrypt/live/$DOMAIN"
+
+IS_IP_CERT=0
+if is_ip "$HOST"; then
+    IS_IP_CERT=1
+fi
+
+ACME_DOMAIN_DIR="$HOME/.acme.sh/${HOST}_ecc"
+CERT_FULLCHAIN="$ACME_DOMAIN_DIR/fullchain.cer"
+CERT_KEY="$ACME_DOMAIN_DIR/${HOST}.key"
 
 if command -v apt-get >/dev/null 2>&1; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq >/dev/null 2>&1
-    apt-get install -yq --no-install-recommends certbot nginx unzip curl qrencode >/dev/null 2>&1
+    apt-get install -yq --no-install-recommends nginx unzip curl qrencode socat >/dev/null 2>&1
 elif command -v dnf >/dev/null 2>&1; then
     dnf -y makecache >/dev/null 2>&1
-    dnf install -y certbot nginx unzip curl qrencode >/dev/null 2>&1
+    dnf install -y nginx unzip curl qrencode socat >/dev/null 2>&1
 else
     echo "Unsupported distro: need apt-get or dnf."
     exit 1
 fi
 
-if [ ! -d "$CERT_DIR" ]; then
+if [ ! -x "$HOME/.acme.sh/acme.sh" ]; then
+    curl -s https://get.acme.sh | sh >/dev/null 2>&1
+fi
+
+if [ ! -f "$CERT_FULLCHAIN" ] || [ ! -f "$CERT_KEY" ]; then
     systemctl stop nginx 2>/dev/null || true
-    certbot certonly -q --standalone --keep --preferred-challenges http \
-        -d "$DOMAIN" --non-interactive --agree-tos --register-unsafely-without-email $CERTBOT_STAGING
+    ACME_ARGS=(--issue --standalone -d "$HOST" --server letsencrypt --keylength ec-256 --debug 0 --log-level 1)
+    if [ "$IS_IP_CERT" -eq 1 ]; then
+        ACME_ARGS+=(--certificate-profile shortlived --days 6)
+    fi
+    if [ -n "${ACME_STAGING:-}" ]; then
+        ACME_ARGS+=(--staging)
+    fi
+    if [ -n "${ACME_FORCE:-}" ]; then
+        ACME_ARGS+=(--force)
+    fi
+    "$HOME/.acme.sh/acme.sh" "${ACME_ARGS[@]}" >/dev/null 2>&1
 fi
 
 if [ ! -f /usr/local/bin/xray ]; then
@@ -88,17 +135,17 @@ map \$http_upgrade \$connection_upgrade {
 }
 
 server {
-    listen 80;
-    server_name $DOMAIN;
+    listen 80$( [ "$IS_IP_CERT" -eq 1 ] && echo " default_server");
+    server_name $HOST;
     return 301 https://\$host\$request_uri;
 }
 
 server {
-    listen 443 ssl;
-    server_name $DOMAIN;
+    listen 443 ssl$( [ "$IS_IP_CERT" -eq 1 ] && echo " default_server");
+    server_name $HOST;
 
-    ssl_certificate $CERT_DIR/fullchain.pem;
-    ssl_certificate_key $CERT_DIR/privkey.pem;
+    ssl_certificate $CERT_FULLCHAIN;
+    ssl_certificate_key $CERT_KEY;
     ssl_protocols       TLSv1.2 TLSv1.3;
     ssl_ciphers         TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384;
     ssl_prefer_server_ciphers off;
@@ -174,8 +221,16 @@ systemctl restart xray@$INSTANCE nginx 2>/dev/null
 
 ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$WS_PATH'))")
 INSECURE="${NOVA_STAGING:+&allowInsecure=1}"
+URI_HOST="$HOST"
+if [[ "$HOST" == *:* ]]; then
+    URI_HOST="[$HOST]"
+fi
+SNI_PARAM=""
+if [ "$IS_IP_CERT" -eq 0 ]; then
+    SNI_PARAM="&sni=$HOST"
+fi
 
-VLESS_URI="vless://$UUID@$DOMAIN:443?type=ws&security=tls&path=$ENCODED_PATH&sni=$DOMAIN&alpn=h2%2Chttp%2F1.1$INSECURE#NOVA-$INSTANCE"
+VLESS_URI="vless://$UUID@$URI_HOST:443?type=ws&security=tls&path=$ENCODED_PATH$SNI_PARAM&alpn=h2%2Chttp%2F1.1$INSECURE#NOVA"
 
 echo "$VLESS_URI" | qrencode -t utf8
 echo ""

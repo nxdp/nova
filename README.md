@@ -5,41 +5,53 @@ One-command VLESS+WS proxy server with TLS.
 ## Requirements
 
 - Debian 12/13 or Ubuntu 22/24, or RHEL 9/10
-- Domain pointing to your server IP
+- Public IPv4 on server (domain is optional)
 - `curl`, `openssl` available
 - Root access
 
 ## Usage
 
 ```bash
-export NOVA_DOMAIN=sub.domain.tld
-bash <(curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh | bash
 ```
 
 Outputs a QR code and `vless://` URI ready to import into your client.
 
 ## Configuration
 
-All variables are optional except `NOVA_DOMAIN`.
+All variables are optional.
 
 | Variable | Required | Default |
 |---|---|---|
-| `NOVA_DOMAIN` | **YES** | — |
+| `NOVA_HOST` | **NO** | server primary IPv4 |
 | `NOVA_UUID` | **NO** | auto-generated |
 | `NOVA_WS_PATH` | **NO** | auto-generated |
 | `NOVA_STAGING` | **NO** | — |
+| `NOVA_FORCE` | **NO** | — |
+
+`NOVA_HOST` accepts either a domain or an IP.
+
+- If `NOVA_HOST` is an IP (or unset and auto-detected as IP), the script requests an IP certificate via acme.sh using Let's Encrypt short-lived profile.
+- If `NOVA_HOST` is a domain, the script requests a normal domain certificate.
 
 ## Examples
 
 ```bash
-# production
-export NOVA_DOMAIN=sub.example.com
+# production (auto primary IP cert)
+curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh | bash
+
+# production (domain cert)
+export NOVA_HOST=sub.example.com
 curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh | bash
 
 # testing (staging cert)
-export NOVA_DOMAIN=sub.example.com
+export NOVA_HOST=203.0.113.10
 export NOVA_STAGING=1
+curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh | bash
 
+# force re-issue certificate
+export NOVA_HOST=203.0.113.10
+export NOVA_FORCE=1
 curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh | bash
 ```
 
