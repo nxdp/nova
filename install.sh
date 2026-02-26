@@ -220,7 +220,10 @@ systemctl --no-block enable -q xray@$INSTANCE nginx 2>/dev/null
 systemctl restart xray@$INSTANCE nginx 2>/dev/null
 
 ENCODED_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$WS_PATH'))")
-INSECURE="${NOVA_STAGING:+&allowInsecure=1}"
+ALLOW_INSECURE="0"
+if [ -n "${NOVA_STAGING:-}" ]; then
+    ALLOW_INSECURE="1"
+fi
 URI_HOST="$HOST"
 if [[ "$HOST" == *:* ]]; then
     URI_HOST="[$HOST]"
@@ -230,7 +233,7 @@ if [ "$IS_IP_CERT" -eq 0 ]; then
     SNI_PARAM="&sni=$HOST"
 fi
 
-VLESS_URI="vless://$UUID@$URI_HOST:443?type=ws&security=tls&path=$ENCODED_PATH$SNI_PARAM&alpn=h2%2Chttp%2F1.1$INSECURE#NOVA"
+VLESS_URI="vless://$UUID@$URI_HOST:443?type=ws&security=tls&path=$ENCODED_PATH$SNI_PARAM&alpn=h2%2Chttp%2F1.1&allowInsecure=$ALLOW_INSECURE#NOVA"
 
 echo "$VLESS_URI" | qrencode -t utf8
 echo ""
