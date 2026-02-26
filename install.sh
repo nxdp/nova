@@ -70,6 +70,10 @@ IS_IP_CERT=0
 if is_ip "$HOST"; then
     IS_IP_CERT=1
 fi
+DEFAULT_SERVER_SUFFIX=""
+if [ "$IS_IP_CERT" -eq 1 ]; then
+    DEFAULT_SERVER_SUFFIX=" default_server"
+fi
 
 ACME_DOMAIN_DIR="$HOME/.acme.sh/${HOST}_ecc"
 CERT_FULLCHAIN="$ACME_DOMAIN_DIR/fullchain.cer"
@@ -85,6 +89,14 @@ elif command -v dnf >/dev/null 2>&1; then
 else
     echo "Unsupported distro: need apt-get or dnf."
     exit 1
+fi
+
+NGINX_VERSION="$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')"
+LISTEN_443="listen 443 ssl${DEFAULT_SERVER_SUFFIX} http2;"
+HTTP2_DIRECTIVE=""
+if [ -n "${NGINX_VERSION:-}" ] && [ "$(printf '%s\n' "$NGINX_VERSION" "1.25.1" | sort -V | head -n 1)" = "1.25.1" ]; then
+    LISTEN_443="listen 443 ssl${DEFAULT_SERVER_SUFFIX};"
+    HTTP2_DIRECTIVE="    http2 on;"
 fi
 
 if [ ! -x "$HOME/.acme.sh/acme.sh" ]; then
@@ -241,13 +253,14 @@ fi
 
 cat > "/etc/nginx/conf.d/$INSTANCE.conf" <<EOF
 server {
-    listen 80$( [ "$IS_IP_CERT" -eq 1 ] && echo " default_server");
+    listen 80$DEFAULT_SERVER_SUFFIX;
     server_name $HOST;
     return 301 https://\$host\$request_uri;
 }
 
 server {
-    listen 443 ssl$( [ "$IS_IP_CERT" -eq 1 ] && echo " default_server");
+    $LISTEN_443
+$HTTP2_DIRECTIVE
     server_name $HOST;
 
     ssl_certificate $CERT_FULLCHAIN;
