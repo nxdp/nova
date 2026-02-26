@@ -9,7 +9,7 @@ One-command VLESS+WS proxy server with TLS.
 - `curl`, `openssl` available
 - Root access
 
-## Install
+## Usage
 
 ```bash
 export NOVA_DOMAIN=sub.domain.tld
@@ -18,7 +18,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/nxdp/nova/main/install.sh)
 
 Outputs a QR code and `vless://` URI ready to import into your client.
 
-## Options
+## Configuration
+
+All variables are optional except `NOVA_DOMAIN`.
 
 | Variable | Required | Default |
 |---|---|---|
@@ -27,7 +29,7 @@ Outputs a QR code and `vless://` URI ready to import into your client.
 | `NOVA_WS_PATH` | **NO** | auto-generated |
 | `NOVA_STAGING` | **NO** | — |
 
-## Example
+## Examples
 
 ```bash
 # production
