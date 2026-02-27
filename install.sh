@@ -365,11 +365,7 @@ fi
 
 if [ "$WS_ENABLED" = "1" ]; then
     ENCODED_WS_PATH=$(python3 -c "import urllib.parse; print(urllib.parse.quote('$WS_PATH'))")
-    WS_REMARK="F99"
-    if [ "$XHTTP_ENABLED" = "1" ]; then
-        WS_REMARK="F99-WS"
-    fi
-    WS_URI="vless://$WS_UUID@$URI_HOST:443?type=ws&security=tls&path=$ENCODED_WS_PATH$SNI_PARAM&alpn=h2%2Chttp%2F1.1&allowInsecure=$ALLOW_INSECURE#$WS_REMARK"
+    WS_URI="vless://$WS_UUID@$URI_HOST:443?type=ws&security=tls&path=$ENCODED_WS_PATH$SNI_PARAM&alpn=h2%2Chttp%2F1.1&allowInsecure=$ALLOW_INSECURE#F99"
     echo "$WS_URI" | qrencode -t utf8
     echo ""
     echo "$WS_URI"

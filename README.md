@@ -82,4 +82,3 @@ curl -fsSL https://raw.githubusercontent.com/nxdp/f99/main/install.sh | bash
 Import the output `vless://` URI into any xray-based client (v2rayN, v2rayNG, Hiddify).
 
 Set `alpn` to `h2,http/1.1` if your client doesn't parse it from the URI.
-If both transports are enabled, installer prints `#F99` (XHTTP) and `#F99-WS`.
