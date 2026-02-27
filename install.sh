@@ -91,16 +91,35 @@ if [ ! -f /usr/local/bin/xray ]; then
     XRAY_DOWNLOAD_PID="$!"
 fi
 
+PKG_MANAGER=""
 if command -v apt-get >/dev/null 2>&1; then
-    export DEBIAN_FRONTEND=noninteractive
-    apt-get update -qq >/dev/null 2>&1
-    apt-get install -yq --no-install-recommends nginx unzip curl qrencode socat >/dev/null 2>&1
+    PKG_MANAGER="apt"
 elif command -v dnf >/dev/null 2>&1; then
-    dnf -y makecache >/dev/null 2>&1
-    dnf install -y nginx unzip curl qrencode socat >/dev/null 2>&1
+    PKG_MANAGER="dnf"
 else
     echo "Unsupported distro: need apt-get or dnf."
     exit 1
+fi
+
+missing_pkgs=()
+need_pkg() {
+    command -v "$1" >/dev/null 2>&1 || missing_pkgs+=("$1")
+}
+
+need_pkg nginx
+need_pkg unzip
+need_pkg qrencode
+need_pkg socat
+
+if [ "${#missing_pkgs[@]}" -gt 0 ]; then
+    if [ "$PKG_MANAGER" = "apt" ]; then
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq >/dev/null 2>&1
+        apt-get install -yq --no-install-recommends "${missing_pkgs[@]}" >/dev/null 2>&1
+    else
+        dnf -y makecache >/dev/null 2>&1
+        dnf install -y "${missing_pkgs[@]}" >/dev/null 2>&1
+    fi
 fi
 
 NGINX_VERSION="$(nginx -v 2>&1 | sed -n 's#.*nginx/\([0-9.]*\).*#\1#p')"
